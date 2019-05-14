@@ -1,4 +1,4 @@
-# HTTP和HTTPS详解。
+# HTTP和HTTPS详解
 
 ### 一，HTTP和HTTPS基本概念
 
