@@ -353,3 +353,330 @@ xdr.abort();
 
 XDR同样支持timeout属性和ontimeout事件处理程序。
 
+### 21.4.2   其他浏览器对CORS的实现
+
+要请求另一个域中的资源，使用标准的XHR对象并在open()中传入绝对URL即可。
+
+与IE中的XDR不同，通过跨域XHR对象可以访问status和statusText属性，并且还支持同步请求。对跨域XHR对象也有限制：
+
+* 不能使用setRequestHeader()设置自定义头部
+* 不能发送和使用cookie
+* 调用getALllResponseHeader()方法总会返回空字符串
+
+由于无论同源请求还是跨域请求都使用相同的接口，因此对于本地资源，建议使用相对URL，对于跨域资源使用绝对URL，这样做能消除歧义，避免出现限制访问头部或本地cookie信息等问题。
+
+### 21.4.3   Preflighted Request
+
+ Preflighted Request:透明服务器验证机制；支持开发人员使用
+
+1. 自定义头部
+2. GET/POST之外的方法
+3. 不同的主体内容
+
+在使用高级选项来发送请求的时候，会向服务器发送一个 Preflighted请求，这种请求使用OPTIONS方法；
+
+浏览器向服务器发送下列头部：
+
+* Origin：与简单请求相同
+* Access-Control-Request-Methods：发送自身使用的方法
+* Access-Control-Request-Headers：自定义头部，以逗号分隔多个头部
+
+发送完请求后，服务器可以决定是否允许这类型的请求，服务器通过在响应中发送如下头部与浏览器进行沟通
+
+* Access-Control-Allow-Origin：与简单请求相同
+* Access-Control-Allow- Methods：允许的方法，多个以逗号隔开
+* Access-Control-Allow- Headers：允许的头部，多个以逗号隔开
+* Access-Control-Max-Age：应将此Preflighted 请求缓存多长时间（以秒表示）
+
+Preflighted 请求结束后，结果将按照响应中制定的时间缓存起来。在第一次发送这种请求的时候会多一次HTTP请求。
+
+### 21.4.4   带凭据的请求
+
+默认情况下，跨域请求不提供凭据，通过将withCredentials属性设置为true，可以指定某个请求应该发送凭据，如果服务器接收带凭据的请求，则会返回一个HTTP头部来响应：
+
+~~~javascript
+Access-Control-Allow-Credentials:true;
+~~~
+
+如果服务器的响应中没有这个头部，那么浏览器就不会把响应提供给JavaScript（于是responseText中的内容为空字符串，status的值为0，并且会调用onerror(）事件处理程序；
+
+服务器还可以在Preflighted 响应中发送这个HTTP头部，表示允许源发送带凭据的请求。
+
+### 21.4.5   跨浏览器的CORS
+
+要兼顾所有浏览器：
+
+~~~javascript
+function createCORSRequest(){
+    var xhr=new XMLHttpRequest();
+    //检测XHR是否支持CORS的虽简单方法，就是检测是否存在withCredentials属性； 
+    if("withCredentials"in xhr){
+        xhr.open(method,url,true);
+        //检测XDomainRequest对象是否存在
+    }else if(typeof XDomainRequest!="undefined")
+       {
+            xhr=new XDomainRequest();
+            xhr.open(method,url);
+        }else{
+            xhr=null;
+        }
+        return xhr;
+    
+    var request=createCORSRequest("get","http://mmmm.com/page");
+    if(request){
+        request.onload=function(){
+            //对request.requestText进行处理
+        };
+         request.send();
+    }
+}
+
+~~~
+
+两个对象共同的属性/方法：
+
+* abort()：用汉语停止正在进行的请求；
+* onerror：用于替代onreadystatechange检测错误；
+* onload：用于替代onreadystatechange检测成功；
+* responseText：用于取得响应内容。
+* send()：用于发送请求
+
+## 21.5   其他跨域技术
+
+### 21.5.1   图像Ping
+
+ 图像Ping是与服务器进行简单、单向跨域通信的一种方式。
+
+请求的数据是通过查询字符串发送的，而响应可以是任意内容，但通常使像素图或204响应。
+
+通过 图像Ping，浏览器得不到任何具体的数据，但通过侦听load和error事件，能知道响应是何时接收到的。
+
+ 图像Ping最常用于跟踪用户点击页面和动态广告曝光次数。
+
+缺点 ：
+
+1. 只能发送GET请求
+2. 无法访问服务器的响应文本。
+
+所以 图像Ping只能用于浏览器与服务器之间的单向通信。
+
+### 21.5.2   JSONP（JSON with padding）
+
+**JSONP：**包含在函数调用中的JSON。
+
+~~~javascript
+callback（{"name":"Nicholas"})
+~~~
+
+##### 组成：
+
+1. 回调函数：回调函数是当响应到来时应该在页面中调用的函数。回调函数的名字一般都是在请求中指定的
+2. 数据：传入回调函数中的JSON数据
+
+##### 使用：
+
+* JSONP是通过动态<script>元素来使用的。这里的script元素与img元素类似，都有能力不受限制的从其他域中加载资源。
+* JSONP是有效的JavaScript代码，所以在请求完成后，即在JSONP响应加载到页面中以后，就会立即执行。
+
+##### 优点：
+
+1. 与图像Ping相比，他能够直接访问响应文本。
+2. 支持在浏览器和服务器之间双向通信。
+
+##### 缺点：
+
+1. JSONP是从其他域加载代码执行的，如果其他域不安全，很有可能会在响应中夹带一些恶意代码，而此时除了完全放弃JSONP调用之外，没有办法追究。因此在使用不是自己运维的web服务时，一定要确保安全可靠。
+2. 不容易确定JSONP的请求是否失败。开发人员需要使用计时器检测指定时间内是否接收到响应。
+
+### 21.5.3   Comet(服务器推送)
+
+Ajax是一种从页面向服务器发送请求数据的技术，而Comet则是从服务器向页面推送数据的基数。
+
+Comet可以让信息近乎实时的推送到页面上，非常适合处理体育比赛的分数和股票报价。
+
+#### 实现Comet的方式：
+
+##### 1.长轮询：
+
+长轮询是传统轮询（短轮询）的一个翻版。短轮询即浏览器定时向服务器发送请求，看是否有需要更新的数据
+
+长轮询则是页面发起一个到服务器的请求，然后服务器一直保持连接打开，直到有数据可以发送。在发送完数据后，浏览器关闭连接，随即又发起一个到服务器的新请求，这一过程在页面打开期间一直持续不断。，
+
+无论长/短轮询，浏览器都要在接收数据之前，先发起对服务器的连接。长短轮询两者最大的区别，就在于服务器是如何发送数据：
+
+* 短轮询是服务器立即发送响应，无论数据是否有效。
+* 长轮询是等待发送响应
+
+轮询的优势是所有的浏览器都支持，只要使用XHR的setTimeout()函数就可以实现，而我们只要确定何时发送请求即可。
+
+##### 2. 流（HTTP流）
+
+流在页面的整个生命周期内只使用一个HTTP连接。也就是说，浏览器向服务器发送一个请求，而服务器保持连接打开，然后周期性的向浏览器发送数据。
+
+所有服务器端都支持打印到输出缓存然后刷新的功能。——实现HTTP流的关键
+
+##### 流的实现过程：
+
+通过侦听readystatechange事件以及检测readystate是否为3，就可以利用XHR的HTTP流。
+
+当readystate为3时，responseText中就会保存接收到的所有数据，此时比较之前接收到的数据，决定从什么位置开始取得最新的数据。
+
+~~~javascript
+//progress接收数据时的调用，finished是关闭数据时的调用
+function createStreamingClient(url,progress,finished){
+    var xhr=new XMLHttpRequest();
+    received=0;//记录处理的字符数
+        xhr.open("get",url,true);
+        xhr.onreadystatechange=function(){
+            var result;
+        if(xhr.readyState==3)
+       {//只取得最新数据并调整计数器
+           result=xhr.responseText.substring(received);//对responseText分割取得最新值
+           received+=result.length;
+           //处理新传入的数据
+           progress(result);
+        }else if(xhr.readyState==4){
+            //传入响应返回的全部内容
+            finished(xhr.responseText);
+        }
+      
+    };
+    xhr.send(null);
+    return xhr;
+}
+
+~~~
+
+### 21.5.4   服务器发送事件（SSE）
+
+SSE API用于创建到服务器的单向连接，服务器通过这个连接可以发送任意数量的数据。
+
+服务器响应的MIME类型必须是text/event-stream，而且时浏览器中的JavaScript API能解析格式输出。
+
+SSE支持短轮询、长轮询和HTTP流，而且能够在断开连接时自动确定何时重新连接。
+
+#### 1. SSE API
+
+##### 1. 创建过程：
+
+创建一个新的EventSource对象，并传进一个入口点：
+
+~~~javascript
+var source = new EventSource("myevents.php")
+~~~
+
+传入的URL必须与创建对象页面同源（相同的url模式，域与接口）。EventSource的实例有一个readyState属性：
+
+* 0：正连接服务器
+* 1：打开了连接
+* 2：关闭了连接
+
+还有以下三个属性：
+
+1. open：在建立连接时触发
+2. message：从服务器接收到新事件时触发
+3. error：在无法建立连接时触发
+
+服务器发回的数据以字符串形式保存在event.data中。如果想强制立即断开连接且不再重连，则可以用close（）方法。
+
+#### 2.事件流
+
+服务器事件会通过一个持久的HTTP响应发送，其MIME类型为text/event-stream。格式为纯文本。
+
+1. 最简单的一个情况是每个数据前都有前缀data：
+
+~~~javascript
+data:foo
+         //包含data的数据后有空行才会触发message事件
+data:bar
+
+data:foo
+data:bar//属于一个事件“foo/nbar"
+//对于多个连续以data开头的数据行，将作为多段数据解析，每个值之间以换行符隔开
+~~~
+
+2. 通过id：前缀可以给事件指定一个关联的ID，设置ID后，EventSource对象会跟踪上一次触发的事件。如果连接断开，会向服务器发送一个包含名为Last-Event-ID的特殊HTTP头部，以便服务器知道下一次该触发哪个事件。在多次连接的事件流中，这种机制可以确保浏览器以正确的顺序收到连接的数据段。  
+
+### 21.5.5   Web Sockets
+
+**Web Sockets**:目标是在一个单独的持久连接上提供双工、双向通信。在创建Web Sockets后，会有一个HTTP请求发送到浏览器以发起连接，在取得服务器连接后，建立的连接会使用从HTTP协议交换的Web Sockets协议。所以未加密连接变为：ws://；加密连接：wss://。
+
+##### 使用自定义协议的好处：
+
+1. 能够在客户端和服务器之间传送非常少量的数据，而不必担心HTTP那样字节级的开销。
+2. 因为传递的数据包很小，所以比较适合移动应用
+
+##### 使用自定义协议的缺点：
+
+1. 制定协议的时间比制定JavaScript API的时间还要长
+2. Web Sockets存在一致性和安全性的问题
+
+#### 1. Web Sockets API
+
+1. 实例一个WebSocket对象并传入要连接的URL：
+
+   ~~~javascript
+   var socket = new WebSocket("ws://...");
+   //必须传入绝对URL，Web Sockets不适用同源策略
+   ~~~
+
+2. 浏览器尝试创建连接，Web Sockets表示当前状态的readyState属性：
+
+   * WebSocket.OPENGING(0):正在建立连接；
+   * WebSocket.OPEN(1):已经建立连接；
+   * WebSocket.CLOSING(2):正在关闭连接；
+   * WebSocket.CLOSE(3):已经关闭连接；
+
+   readyState永远从0开始
+
+3. 关闭Web Sockets连接，可以在任何时候调用close()，调用后readyState变为2然后变为3
+
+#### 2.发送和接收数据
+
+1. 向服务器发送数据，使用send()方法并传入任意字符串。
+2. Web Sockets只能通过连接发送纯文本数据，所以对于复杂的数据结构，再通过连接发送之前必须进行序列化。
+3. 服务器向客户端发来消息时，WebSocket对象就会触发message事件，返回的数据保存在event.data为字符串需要解析。
+
+#### 3. 其他事件
+
+WebSocket对象还有三个事件，在连接生命周期的不同阶段触发：
+
+* open：成功连接时触发
+* error：发生错误时触发，连接不能持续；
+* close：连接关闭时触发；
+
+WebSocket对象必须使用DOM 0级语法分别定义每个事件处理程序：
+
+~~~javascript
+socket.onclose=function(event){
+    console.log("was clean"+event.wasClean+"code="+event.code+"reason="+event.reason);
+};
+~~~
+
+close事件的event对象有三个额外的属性：
+
+* wasClean:布尔值，表示连接是否明确关闭
+* code：服务器返回的数值码；
+* reason：字符串，包含服务器发回的信息。
+
+### 21.5.6 SSE与Web Sockets
+
+考虑该用 SSE与Web Sockets：
+
+1. 是否有自由度建立和维护Web Sockets服务器。
+2. 需不需要双向通信。组合XHR和SSE也可以实现双向通信
+
+## 21.6   安全
+
+##### **CSRF(跨站点请求伪造):**未被授权系统有权访问某个资源的情况。
+
+确保通过XHR访问的URL安全，以下有几种方式：
+
+* 要求以SSL连接来访问可以通过XHR请求的资源
+* 要求每一次请求都要附带经过相应算法计算得到的验证码。
+
+下列措施对防范CSRF无作用：
+
+* 要求发送POST而不是GET——很容易改变
+* 检查来源URL以确定是否可信——来源记录很容易伪造
+* 基于cookie信息进行验证——同样容易伪造
